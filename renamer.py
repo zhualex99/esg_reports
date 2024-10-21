@@ -1,36 +1,53 @@
 import os
 import spacy
-import PyPDF2
 from PyPDF2 import PdfReader
 import re
+import glob
 
-nlp = spacy.load("en_core_web_sm")
+# Replace with your folder path
+path = '/Users/alexanderzhu/Library/CloudStorage/OneDrive-UniversityofWaterloo/test1' 
 
-path = 'Greene King - 2014.pdf'
-reader = PdfReader(path)
-number_of_pages = len(reader.pages)
-
-page = reader.pages[0]
-text = page.extract_text()
-
-doc = nlp(text)
-
-#initialize the key global variables
-org = ''
-year = ''
+nlp = spacy.load("en_core_web_md")
 
 #regex to extract the year
 year_pattern = re.compile(r"\b(19|20)\d{2}\b")
 
-print(doc.ents)
-# Find named entities, phrases and concepts
-for entity in doc.ents:
-    if("ORG" in entity.label_):
-        org = entity.text
-    if("DATE" in entity.label_):
-        #fixes bug where sometimes date has additional numbers after a space
-        #if(len(entity.text) == 4): 
-        year = year_pattern.search(entity.text).group()
+# Iterate over the list of PDF files
+for file in glob.glob(path + '/*.pdf'):
+    print(file)
+    reader = PdfReader(file)
 
-new_name = f"will be renamed to: {org}-{year}"
-print(new_name)
+    #extract entities from first page
+    org_found = False
+    year_found = False
+    i = 0
+    while (org_found == False or year_found == False):
+        page = reader.pages[i]
+        text = page.extract_text()
+        doc = nlp(text)
+        i+=1
+        # Find named entities, phrases and concepts
+        for entity in doc.ents:
+            find_year = year_pattern.search(entity.text)
+            if("ORG" in entity.label_):
+                org = entity.text
+                org_found = True
+            if("DATE" in entity.label_ and find_year and len(find_year.group()) == 4 and 
+                int(find_year.group()) >= 2000 and int(find_year.group()) <= 2023):
+                year = find_year.group()
+                year_found = True
+    old_name = file
+    new_name = f"{path}/{org}-{year}.pdf"
+
+    last_4 = old_name[len(old_name)-8:len(old_name)-4]
+    print(last_4)
+    #renames the file only if last 4 digits don't fall into the range (2015-2022)
+    #i.e. hasn't been properly named already, this is so that we don't corrupt
+    #the file names that have already been manually renamed
+    if(last_4 < "2015" or last_4 > "2022"):
+        os.rename(old_name,new_name)
+
+
+#Assumptions made:
+#File names are at least 4 characters long, followed by .pdf
+#File names ending in 2015-2022 have already been renamed
